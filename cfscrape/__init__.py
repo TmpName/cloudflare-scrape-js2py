@@ -162,8 +162,7 @@ class CloudflareScraper(Session):
             innerHTML = innerHTML.replace("'", r"\'")
             
             js = jsunfuck('{}{}'.format(jsEnv.format(innerHTML=innerHTML, domain=domain), js))
-            print('{}'.format(js))
-            
+                        
             def atob(s):
                 return base64.b64decode(str(s))
 
