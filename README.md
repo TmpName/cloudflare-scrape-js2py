@@ -22,9 +22,7 @@ Any script using cloudflare-scrape will sleep for 5 seconds for the first visit 
 Installation
 ============
 
-Simply run `pip install cfscrape`. The PyPI package is at https://pypi.python.org/pypi/cfscrape/
-
-Alternatively, clone this repository and run `python setup.py install`.
+Clone this repository and run `python setup.py install`.
 
 Dependencies
 ============
