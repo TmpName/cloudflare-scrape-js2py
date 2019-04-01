@@ -75,7 +75,7 @@ class CloudflareScraper(Session):
 
         delay = float(re.search(r"submit\(\);\r?\n\s*},\s*([0-9]+)", body).group(1)) / float(1000)
         if delay < 8:
-            sleep.delay = delay
+            self.delay = delay
         
         sleep(self.delay)  # Cloudflare requires a delay before solving the challenge
 
