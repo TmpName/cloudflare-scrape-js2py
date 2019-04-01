@@ -19,7 +19,7 @@ except ImportError:
 __version__ = "1.9.5"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
-# Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
+# Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/cloudflare-scrape-js2py - 24/3/2018 NZDT
 
 DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
