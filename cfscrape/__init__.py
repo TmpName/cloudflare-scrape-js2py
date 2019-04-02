@@ -7,7 +7,7 @@ import base64
 from copy import deepcopy
 from time import sleep
 from collections import OrderedDict
-from cfscrape.jsfuck import jsunfuck
+from jsfuck import jsunfuck
 
 import js2py
 from requests.sessions import Session
@@ -154,19 +154,27 @@ class CloudflareScraper(Session):
         try:
             jsEnv = """
             var t = "{domain}";
-            function italics (str) {{ return '<i>' + this + '</i>'; }}
-            var document = {{ getElementById: function () {{ return {{'innerHTML': '{innerHTML}'}}; }} }};
+            function italics (str) {{ return '<i>' + this + '</i>'; }};
+            var document = {{
+                getElementById: function () {{
+                    return {{'innerHTML': '{innerHTML}'}};
+                }}
+            }};
+            {js}
             """
             
-            innerHTML = re.search('<div(?: [^<>]*)? id="([^<>]*?)">([^<>]*?)<\/div>', body, re.MULTILINE | re.DOTALL).group(2)
-            innerHTML = innerHTML.replace("'", r"\'")
-            
-            js = jsunfuck('{}{}'.format(jsEnv.format(innerHTML=innerHTML, domain=domain), js))
-                        
-            def atob(s):
-                return base64.b64decode(str(s))
+            innerHTML = re.search(
+                '<div(?: [^<>]*)? id="([^<>]*?)">([^<>]*?)<\/div>',
+                body,
+                re.MULTILINE | re.DOTALL
+            ).group(2).replace("'", r"\'")
 
-            context = js2py.EvalJs({ "atob": atob });
+            js = jsunfuck(jsEnv.format(domain = domain, innerHTML=innerHTML, js=js))
+            
+            def atob(s):
+                return base64.b64decode('{}'.format(s))
+
+            context = js2py.EvalJs({"atob": atob})
             result = context.eval(js)
         except Exception:
             logging.error("Error executing Cloudflare IUAM Javascript. %s" % BUG_REPORT)
