@@ -7,7 +7,7 @@ import base64
 from copy import deepcopy
 from time import sleep
 from collections import OrderedDict
-from jsfuck import jsunfuck
+from .jsfuck import jsunfuck
 
 import js2py
 from requests.sessions import Session
@@ -173,7 +173,7 @@ class CloudflareScraper(Session):
             js = jsunfuck(jsEnv.format(domain = domain, innerHTML=innerHTML, js=js))
             
             def atob(s):
-                return base64.b64decode('{}'.format(s))
+                return base64.b64decode('{}'.format(s)).decode('utf-8')
 
             context = js2py.EvalJs({"atob": atob})
             result = context.eval(js)
