@@ -2,9 +2,12 @@ import logging
 import random
 import re
 
+import base64
+
 from copy import deepcopy
 from time import sleep
 from collections import OrderedDict
+from jsfuck import jsunfuck
 
 import js2py
 from requests.sessions import Session
@@ -19,7 +22,7 @@ except ImportError:
 __version__ = "1.9.5"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
-# Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/cloudflare-scrape-js2py - 24/3/2018 NZDT
+# Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
 
 DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
@@ -35,13 +38,6 @@ DEFAULT_USER_AGENT = random.choice(DEFAULT_USER_AGENTS)
 
 BUG_REPORT = """\
 Cloudflare may have changed their technique, or there may be a bug in the script.
-"""
-
-ANSWER_ACCEPT_ERROR = """\
-The challenge answer was not properly accepted by Cloudflare. This can occur if \
-the target website is under heavy load, or if Cloudflare is experiencing issues. You can
-potentially resolve this by increasing the challenge answer delay (default: 8 seconds). \
-For example: cfscrape.create_scraper(delay=15)
 """
 
 class CloudflareScraper(Session):
@@ -77,7 +73,10 @@ class CloudflareScraper(Session):
     def solve_cf_challenge(self, resp, **original_kwargs):
         body = resp.text
 
-        self.delay = float(re.search(r"submit\(\);\r?\n\s*},\s*([0-9]+)", body).group(1)) / float(1000)
+        delay = float(re.search(r"submit\(\);\r?\n\s*},\s*([0-9]+)", body).group(1)) / float(1000)
+        if delay < 8:
+            self.delay = delay
+        
         sleep(self.delay)  # Cloudflare requires a delay before solving the challenge
 
         parsed_url = urlparse(resp.url)
@@ -134,20 +133,7 @@ class CloudflareScraper(Session):
         return self.request(method, redirect.headers["Location"], **original_kwargs)
 
     def solve_challenge(self, body, domain):
-        try:
-            body = re.sub(
-                r'function\(p\){var p = eval\(eval\(atob\(".*?"\)\+\(undefined\+""\)\[1\]\+\(true\+""\)\[0\]\+\(\+\(\+!'
-                '\+\[\]\+\[\+!\+\[\]\]\+\(!!\[\]\+\[\]\)\[!\+\[\]\+!\+\[\]\+!\+\[\]\]\+\[!\+\[\]\+!\+\[\]\]\+\[\+\[\]\]'
-                '\)\+\[\]\)\[\+!\+\[\]\]\+\(false\+\[0\]\+String\)\[20\]\+\(true\+""\)\[3\]\+\(true\+""\)\[0\]\+"Element"'
-                '\+\(\+\[\]\+Boolean\)\[10\]\+\(NaN\+\[Infinity\]\)\[10\]\+"Id\("\+\(\+\(20\)\)\["to"\+String\["name"\]\]'
-                '\(21\)\+"\)."\+atob\(".*?"\)\)\); return \+\(p\)}\(\);',
-                '{};'.format(
-                    re.search('<div style="display:none;visibility:hidden;" id="(.*?)">(.*?)<\/div>',
-                    body,
-                    re.MULTILINE | re.DOTALL).group(2)
-                ),
-                body
-            )
+        try:            
             js = re.search(r"setTimeout\(function\(\){\s+(var "
                         "s,t,o,p,b,r,e,a,k,i,n,g,f.+?\r?\n[\s\S]+?a\.value =.+?)\r?\n", body).group(1)
         except Exception:
@@ -158,13 +144,6 @@ class CloudflareScraper(Session):
 
         js = js.replace('; 121', '')
 
-        js = js.replace(
-            'function(p){return eval((true+"")[0]+"."+([]["fill"]+"")[3]+(+(101))["to"+String["name"]](21)[1]+(false+"")'
-            '[1]+(true+"")[1]+Function("return escape")()(("")["italics"]())[2]+(true+[]["fill"])[10]+(undefined+"")[2]+'
-            '(true+"")[3]+(+[]+Array)[10]+(true+"")[0]+"("+p+")")}',
-            't.charCodeAt'
-        )
-
         # Strip characters that could be used to exit the string context
         # These characters are not currently used in Cloudflare's arithmetic snippet
         js = re.sub(r"[\n\\']", "", js)
@@ -173,8 +152,31 @@ class CloudflareScraper(Session):
             raise ValueError("Error parsing Cloudflare IUAM Javascript challenge. %s" % BUG_REPORT)
 
         try:
-            js = 'a = {{}}; t = "{}";{}'.format(domain, js)
-            result = js2py.eval_js(js)
+            jsEnv = """
+            var t = "{domain}";
+            var g = String.fromCharCode;
+            function italics (str) {{ return '<i>' + this + '</i>'; }};
+            var document = {{
+                getElementById: function () {{
+                    return {{'innerHTML': '{innerHTML}'}};
+                }}
+            }};
+            {js}
+            """
+            
+            innerHTML = re.search(
+                '<div(?: [^<>]*)? id="([^<>]*?)">([^<>]*?)<\/div>',
+                body,
+                re.MULTILINE | re.DOTALL
+            ).group(2).replace("'", r"\'")
+
+            js = jsunfuck(jsEnv.format(domain = domain, innerHTML=innerHTML, js=js))
+            
+            def atob(s):
+                return base64.b64decode('{}'.format(s))
+
+            context = js2py.EvalJs({"atob": atob})
+            result = context.eval(js)
         except Exception:
             logging.error("Error executing Cloudflare IUAM Javascript. %s" % BUG_REPORT)
             raise
