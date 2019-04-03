@@ -154,6 +154,7 @@ class CloudflareScraper(Session):
         try:
             jsEnv = """
             var t = "{domain}";
+            var g = String.fromCharCode;
             function italics (str) {{ return '<i>' + this + '</i>'; }};
             var document = {{
                 getElementById: function () {{
