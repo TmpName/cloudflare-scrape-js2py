@@ -46,9 +46,9 @@ class CloudflareScraper(Session):
         self.delay = kwargs.pop('delay', 8)
         super(CloudflareScraper, self).__init__(*args, **kwargs)
 
-        if "requests" in self.headers['User-Agent']:
+        if 'requests' in self.headers['User-Agent']:
             # Set a random User-Agent if no custom User-Agent has been set
-            self.headers["User-Agent"] = DEFAULT_USER_AGENT
+            self.headers['User-Agent'] = DEFAULT_USER_AGENT
 
     def set_cloudflare_challenge_delay(self, delay):
         if isinstance(delay, (int, float)) and delay > 0:
@@ -58,8 +58,8 @@ class CloudflareScraper(Session):
         return (
             resp.status_code in [429, 503]
             and resp.headers.get('Server', '').startswith('cloudflare')
-            and b"jschl_vc" in resp.content
-            and b"jschl_answer" in resp.content
+            and b'jschl_vc' in resp.content
+            and b'jschl_answer' in resp.content
         )
 
     def request(self, method, url, *args, **kwargs):
@@ -115,17 +115,17 @@ class CloudflareScraper(Session):
             raise ValueError("Unable to parse Cloudflare anti-bots page: {} {}".format(e.message, BUG_REPORT))
 
         # Solve the Javascript challenge
-        params["jschl_answer"] = self.solve_challenge(body, domain)
+        params['jschl_answer'] = self.solve_challenge(body, domain)
 
         # Requests transforms any request into a GET after a redirect,
         # so the redirect has to be handled manually here to allow for
         # performing other types of requests even as the first request.
         method = resp.request.method
 
-        cloudflare_kwargs["allow_redirects"] = False
+        cloudflare_kwargs['allow_redirects'] = False
 
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
-        redirect_location = urlparse(redirect.headers["Location"])
+        redirect_location = urlparse(redirect.headers['Location'])
 
         if not redirect_location.netloc:
             redirect_url = urlunparse(
@@ -140,7 +140,7 @@ class CloudflareScraper(Session):
             )
             return self.request(method, redirect_url, **original_kwargs)
 
-        return self.request(method, redirect.headers["Location"], **original_kwargs)
+        return self.request(method, redirect.headers['Location'], **original_kwargs)
 
     def solve_challenge(self, body, domain):
         try:
@@ -160,7 +160,7 @@ class CloudflareScraper(Session):
         # These characters are not currently used in Cloudflare's arithmetic snippet
         js = re.sub(r"[\n\\']", "", js)
 
-        if "toFixed" not in js:
+        if 'toFixed' not in js:
             raise ValueError("Error parsing Cloudflare IUAM Javascript challenge. {}".format(BUG_REPORT))
 
         try:
@@ -188,7 +188,7 @@ class CloudflareScraper(Session):
             def atob(s):
                 return base64.b64decode('{}'.format(s)).decode('utf-8')
 
-            context = js2py.EvalJs({"atob": atob})
+            context = js2py.EvalJs({'atob': atob})
             result = context.eval(js)
         except Exception:
             logging.error("Error executing Cloudflare IUAM Javascript. {}".format(BUG_REPORT))
@@ -222,7 +222,7 @@ class CloudflareScraper(Session):
     def get_tokens(cls, url, user_agent=None, **kwargs):
         scraper = cls.create_scraper()
         if user_agent:
-            scraper.headers["User-Agent"] = user_agent
+            scraper.headers['User-Agent'] = user_agent
 
         try:
             resp = scraper.get(url, **kwargs)
@@ -235,7 +235,7 @@ class CloudflareScraper(Session):
         cookie_domain = None
 
         for d in scraper.cookies.list_domains():
-            if d.startswith(".") and d in ("." + domain):
+            if d.startswith('.') and d in ('.{}'.format(domain)):
                 cookie_domain = d
                 break
         else:
@@ -243,10 +243,10 @@ class CloudflareScraper(Session):
 
         return (
             {
-                "__cfduid": scraper.cookies.get("__cfduid", "", domain=cookie_domain),
-                "cf_clearance": scraper.cookies.get("cf_clearance", "", domain=cookie_domain)
+                '__cfduid': scraper.cookies.get('__cfduid', '', domain=cookie_domain),
+                'cf_clearance': scraper.cookies.get('cf_clearance', '', domain=cookie_domain)
             },
-            scraper.headers["User-Agent"]
+            scraper.headers['User-Agent']
         )
 
     @classmethod
