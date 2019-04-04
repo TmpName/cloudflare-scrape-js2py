@@ -55,12 +55,16 @@ class CloudflareScraper(Session):
             self.delay = delay
 
     def is_cloudflare_challenge(self, resp):
-        return (
-            resp.status_code in [429, 503]
-            and resp.headers.get('Server', '').startswith('cloudflare')
-            and b'jschl_vc' in resp.content
-            and b'jschl_answer' in resp.content
-        )
+        if resp.headers.get('Server', '').startswith('cloudflare'):
+            if b'why_captcha' in resp.content or b'/cdn-cgi/l/chk_captcha' in resp.content:
+                raise ValueError('Captcha')
+            
+            return (
+                resp.status_code in [429, 503]
+                and b"jschl_vc" in resp.content
+                and b"jschl_answer" in resp.content
+            )
+        return False
 
     def request(self, method, url, *args, **kwargs):
         self.headers['Accept-Encoding'] = 'gzip, deflate'
@@ -71,7 +75,15 @@ class CloudflareScraper(Session):
 
         # Check if Cloudflare anti-bot is on
         if self.is_cloudflare_challenge(resp):
-            resp = self.solve_cf_challenge(resp, **kwargs)
+            if resp.request.method == 'POST':
+                parsed_url = urlparse(resp.url)
+                domain = parsed_url.netloc
+                new_resp = self.get('{}://{}/'.format(parsed_url.scheme, domain))
+                if self.is_cloudflare_challenge(new_resp):
+                    self.solve_cf_challenge(new_resp)
+                    resp = self.request(method, url, *args, **kwargs)
+            else:
+                resp = self.solve_cf_challenge(resp, **kwargs)
 
         return resp
 
@@ -123,10 +135,9 @@ class CloudflareScraper(Session):
         method = resp.request.method
 
         cloudflare_kwargs['allow_redirects'] = False
-
+        
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
         redirect_location = urlparse(redirect.headers['Location'])
-
         if not redirect_location.netloc:
             redirect_url = urlunparse(
                 (
