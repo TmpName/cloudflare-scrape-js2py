@@ -75,6 +75,7 @@ class CloudflareScraper(Session):
 
         # Check if Cloudflare anti-bot is on
         if self.is_cloudflare_challenge(resp):
+            # Work around if the initial request is a POST, superseed with a GET then re-request the POST.
             if resp.request.method == 'POST':
                 parsed_url = urlparse(resp.url)
                 new_resp = self.get('{}://{}/'.format(parsed_url.scheme, parsed_url.netloc))
