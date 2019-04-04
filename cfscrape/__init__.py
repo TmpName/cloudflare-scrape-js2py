@@ -51,7 +51,7 @@ class CloudflareScraper(Session):
 
     def is_cloudflare_challenge(self, resp):
         return (
-            resp.status_code == 503
+            resp.status_code in [429, 503]
             and resp.headers.get("Server", "").startswith("cloudflare")
             and b"jschl_vc" in resp.content
             and b"jschl_answer" in resp.content
