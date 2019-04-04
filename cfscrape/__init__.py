@@ -77,8 +77,7 @@ class CloudflareScraper(Session):
         if self.is_cloudflare_challenge(resp):
             if resp.request.method == 'POST':
                 parsed_url = urlparse(resp.url)
-                domain = parsed_url.netloc
-                new_resp = self.get('{}://{}/'.format(parsed_url.scheme, domain))
+                new_resp = self.get('{}://{}/'.format(parsed_url.scheme, parsed_url.netloc))
                 if self.is_cloudflare_challenge(new_resp):
                     self.solve_cf_challenge(new_resp)
                     resp = self.request(method, url, *args, **kwargs)
