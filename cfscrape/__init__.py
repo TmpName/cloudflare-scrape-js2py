@@ -168,9 +168,10 @@ class CloudflareScraper(Session):
                 '<div(?: [^<>]*)? id="([^<>]*?)">([^<>]*?)<\/div>',
                 body,
                 re.MULTILINE | re.DOTALL
-            ).group(2).replace("'", r"\'")
+            )
+            innerHTML = innerHTML.group(2).replace("'", r"\'") if innerHTML else ""
 
-            js = jsunfuck(jsEnv.format(domain = domain, innerHTML=innerHTML, js=js))
+            js = jsunfuck(jsEnv.format(domain=domain, innerHTML=innerHTML, js=js))
             
             def atob(s):
                 return base64.b64decode('{}'.format(s)).decode('utf-8')
