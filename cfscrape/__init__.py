@@ -40,55 +40,75 @@ BUG_REPORT = """\
 Cloudflare may have changed their technique, or there may be a bug in the script.
 """
 
+
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
-        self.delay = kwargs.pop("delay", 8)
+        self.delay = kwargs.pop('delay', 8)
         super(CloudflareScraper, self).__init__(*args, **kwargs)
 
-        if "requests" in self.headers["User-Agent"]:
+        if 'requests' in self.headers['User-Agent']:
             # Set a random User-Agent if no custom User-Agent has been set
-            self.headers["User-Agent"] = DEFAULT_USER_AGENT
+            self.headers['User-Agent'] = DEFAULT_USER_AGENT
+
+    def set_cloudflare_challenge_delay(self, delay):
+        if isinstance(delay, (int, float)) and delay > 0:
+            self.delay = delay
 
     def is_cloudflare_challenge(self, resp):
-        return (
-            resp.status_code in [429, 503]
-            and resp.headers.get("Server", "").startswith("cloudflare")
-            and b"jschl_vc" in resp.content
-            and b"jschl_answer" in resp.content
-        )
+        if resp.headers.get('Server', '').startswith('cloudflare'):
+            if b'why_captcha' in resp.content or b'/cdn-cgi/l/chk_captcha' in resp.content:
+                raise ValueError('Captcha')
+            
+            return (
+                resp.status_code in [429, 503]
+                and b"jschl_vc" in resp.content
+                and b"jschl_answer" in resp.content
+            )
+        return False
 
     def request(self, method, url, *args, **kwargs):
         self.headers['Accept-Encoding'] = 'gzip, deflate'
         self.headers['Accept-Language'] = 'en-US,en;q=0.9'
         self.headers['DNT'] = '1'
-        
+
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
-        
+
         # Check if Cloudflare anti-bot is on
-        if self.is_cloudflare_challenge(resp):
-            resp = self.solve_cf_challenge(resp, **kwargs)
+        if self.is_cloudflare_challenge(resp):           
+            # Work around if the initial request is not a GET,
+            # Superseed with a GET then re-request the orignal METHOD.
+            if resp.request.method != 'GET':
+                self.request('GET', resp.url)
+                resp = self.request(method, url, *args, **kwargs)
+            else:
+                resp = self.solve_cf_challenge(resp, **kwargs)
 
         return resp
 
     def solve_cf_challenge(self, resp, **original_kwargs):
         body = resp.text
 
-        delay = float(re.search(r"submit\(\);\r?\n\s*},\s*([0-9]+)", body).group(1)) / float(1000)
-        if delay < 8:
-            self.delay = delay
-        
-        sleep(self.delay)  # Cloudflare requires a delay before solving the challenge
+        # Cloudflare requires a delay before solving the challenge
+        if self.delay == 8:
+            try:
+                delay = float(re.search(r'submit\(\);\r?\n\s*},\s*([0-9]+)', body).group(1)) / float(1000)
+                if isinstance(delay, (int, float)):
+                    self.delay = delay
+            except:
+                pass
+
+        sleep(self.delay)
 
         parsed_url = urlparse(resp.url)
         domain = parsed_url.netloc
-        submit_url = "{}://{}/cdn-cgi/l/chk_jschl".format(parsed_url.scheme, domain)
+        submit_url = '{}://{}/cdn-cgi/l/chk_jschl'.format(parsed_url.scheme, domain)
 
         cloudflare_kwargs = deepcopy(original_kwargs)
         headers = cloudflare_kwargs.setdefault('headers', {'Referer': resp.url})
-        
+
         try:
             params = cloudflare_kwargs.setdefault(
-                "params", OrderedDict(
+                'params', OrderedDict(
                     [
                         ('s', re.search(r'name="s"\svalue="(?P<s_value>[^"]+)', body).group('s_value')),
                         ('jschl_vc', re.search(r'name="jschl_vc" value="(\w+)"', body).group(1)),
@@ -102,21 +122,20 @@ class CloudflareScraper(Session):
             # This may indicate Cloudflare has changed their anti-bot
             # technique. If you see this and are running the latest version,
             # please open a GitHub issue so I can update the code accordingly.
-            raise ValueError("Unable to parse Cloudflare anti-bots page: %s %s" % (e.message, BUG_REPORT))
+            raise ValueError("Unable to parse Cloudflare anti-bots page: {} {}".format(e.message, BUG_REPORT))
 
         # Solve the Javascript challenge
-        params["jschl_answer"] = self.solve_challenge(body, domain)
+        params['jschl_answer'] = self.solve_challenge(body, domain)
 
         # Requests transforms any request into a GET after a redirect,
         # so the redirect has to be handled manually here to allow for
         # performing other types of requests even as the first request.
         method = resp.request.method
-        
-        cloudflare_kwargs["allow_redirects"] = False
+
+        cloudflare_kwargs['allow_redirects'] = False
         
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
-        redirect_location = urlparse(redirect.headers["Location"])
-
+        redirect_location = urlparse(redirect.headers['Location'])
         if not redirect_location.netloc:
             redirect_url = urlunparse(
                 (
@@ -129,15 +148,17 @@ class CloudflareScraper(Session):
                 )
             )
             return self.request(method, redirect_url, **original_kwargs)
-        
-        return self.request(method, redirect.headers["Location"], **original_kwargs)
+
+        return self.request(method, redirect.headers['Location'], **original_kwargs)
 
     def solve_challenge(self, body, domain):
-        try:            
-            js = re.search(r"setTimeout\(function\(\){\s+(var "
-                        "s,t,o,p,b,r,e,a,k,i,n,g,f.+?\r?\n[\s\S]+?a\.value =.+?)\r?\n", body).group(1)
+        try:
+            js = re.search(
+                r"setTimeout\(function\(\){\s+(var s,t,o,p,b,r,e,a,k,i,n,g,f.+?\r?\n[\s\S]+?a\.value =.+?)\r?\n",
+                body
+            ).group(1)
         except Exception:
-            raise ValueError("Unable to identify Cloudflare IUAM Javascript on website. %s" % BUG_REPORT)
+            raise ValueError("Unable to identify Cloudflare IUAM Javascript on website. {}".format(BUG_REPORT))
 
         js = re.sub(r"a\.value = ((.+).toFixed\(10\))?", r"\1", js)
         js = re.sub(r"\s{3,}[a-z](?: = |\.).+", "", js).replace("t.length", str(len(domain)))
@@ -148,8 +169,8 @@ class CloudflareScraper(Session):
         # These characters are not currently used in Cloudflare's arithmetic snippet
         js = re.sub(r"[\n\\']", "", js)
 
-        if "toFixed" not in js:
-            raise ValueError("Error parsing Cloudflare IUAM Javascript challenge. %s" % BUG_REPORT)
+        if 'toFixed' not in js:
+            raise ValueError("Error parsing Cloudflare IUAM Javascript challenge. {}".format(BUG_REPORT))
 
         try:
             jsEnv = """
@@ -163,7 +184,7 @@ class CloudflareScraper(Session):
             }};
             {js}
             """
-            
+
             innerHTML = re.search(
                 '<div(?: [^<>]*)? id="([^<>]*?)">([^<>]*?)<\/div>',
                 body,
@@ -172,20 +193,20 @@ class CloudflareScraper(Session):
             innerHTML = innerHTML.group(2).replace("'", r"\'") if innerHTML else ""
 
             js = jsunfuck(jsEnv.format(domain=domain, innerHTML=innerHTML, js=js))
-            
+
             def atob(s):
                 return base64.b64decode('{}'.format(s)).decode('utf-8')
 
-            context = js2py.EvalJs({"atob": atob})
+            context = js2py.EvalJs({'atob': atob})
             result = context.eval(js)
         except Exception:
-            logging.error("Error executing Cloudflare IUAM Javascript. %s" % BUG_REPORT)
+            logging.error("Error executing Cloudflare IUAM Javascript. {}".format(BUG_REPORT))
             raise
 
         try:
             float(result)
         except Exception:
-            raise ValueError("Cloudflare IUAM challenge returned unexpected answer. %s" % BUG_REPORT)
+            raise ValueError("Cloudflare IUAM challenge returned unexpected answer. {}".format(BUG_REPORT))
 
         return result
 
@@ -197,7 +218,7 @@ class CloudflareScraper(Session):
         scraper = cls(**kwargs)
 
         if sess:
-            attrs = ["auth", "cert", "cookies", "headers", "hooks", "params", "proxies", "data"]
+            attrs = ['auth', 'cert', 'cookies', 'headers', 'hooks', 'params', 'proxies', 'data']
             for attr in attrs:
                 val = getattr(sess, attr, None)
                 if val:
@@ -205,27 +226,25 @@ class CloudflareScraper(Session):
 
         return scraper
 
-
-    ## Functions for integrating cloudflare-scrape with other applications and scripts
-
+    # Functions for integrating cloudflare-scrape with other applications and scripts
     @classmethod
     def get_tokens(cls, url, user_agent=None, **kwargs):
         scraper = cls.create_scraper()
         if user_agent:
-            scraper.headers["User-Agent"] = user_agent
+            scraper.headers['User-Agent'] = user_agent
 
         try:
             resp = scraper.get(url, **kwargs)
             resp.raise_for_status()
         except Exception as e:
-            logging.error("'%s' returned an error. Could not collect tokens." % url)
+            logging.error("'{}' returned an error. Could not collect tokens.".format(url))
             raise
 
         domain = urlparse(resp.url).netloc
         cookie_domain = None
 
         for d in scraper.cookies.list_domains():
-            if d.startswith(".") and d in ("." + domain):
+            if d.startswith('.') and d in ('.{}'.format(domain)):
                 cookie_domain = d
                 break
         else:
@@ -233,10 +252,10 @@ class CloudflareScraper(Session):
 
         return (
             {
-                "__cfduid": scraper.cookies.get("__cfduid", "", domain=cookie_domain),
-                "cf_clearance": scraper.cookies.get("cf_clearance", "", domain=cookie_domain)
+                '__cfduid': scraper.cookies.get('__cfduid', '', domain=cookie_domain),
+                'cf_clearance': scraper.cookies.get('cf_clearance', '', domain=cookie_domain)
             },
-            scraper.headers["User-Agent"]
+            scraper.headers['User-Agent']
         )
 
     @classmethod
