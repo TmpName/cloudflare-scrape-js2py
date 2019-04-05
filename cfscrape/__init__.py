@@ -19,7 +19,7 @@ except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import urlunparse
 
-__version__ = "1.9.5"
+__version__ = "2.0.0"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
 # Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
