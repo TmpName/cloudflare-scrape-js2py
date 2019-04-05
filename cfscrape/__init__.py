@@ -34,12 +34,9 @@ DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:57.0) Gecko/20100101 Firefox/57.0",
 ]
 
-DEFAULT_USER_AGENT = random.choice(DEFAULT_USER_AGENTS)
-
 BUG_REPORT = """\
 Cloudflare may have changed their technique, or there may be a bug in the script.
 """
-
 
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
@@ -48,7 +45,8 @@ class CloudflareScraper(Session):
 
         if 'requests' in self.headers['User-Agent']:
             # Set a random User-Agent if no custom User-Agent has been set
-            self.headers['User-Agent'] = DEFAULT_USER_AGENT
+            self.headers['User-Agent'] = random.choice(DEFAULT_USER_AGENTS)
+
 
     def set_cloudflare_challenge_delay(self, delay):
         if isinstance(delay, (int, float)) and delay > 0:
