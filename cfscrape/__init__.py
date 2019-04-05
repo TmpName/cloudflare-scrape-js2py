@@ -74,13 +74,11 @@ class CloudflareScraper(Session):
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
 
         # Check if Cloudflare anti-bot is on
-        if self.is_cloudflare_challenge(resp):
-            
+        if self.is_cloudflare_challenge(resp):           
             # Work around if the initial request is not a GET,
             # Superseed with a GET then re-request the orignal METHOD.
             if resp.request.method != 'GET':
-                parsed_url = urlparse(resp.url)
-                self.get('{}://{}/'.format(parsed_url.scheme, parsed_url.netloc))
+                self.request('GET', resp.url)
                 resp = self.request(method, url, *args, **kwargs)
             else:
                 resp = self.solve_cf_challenge(resp, **kwargs)
