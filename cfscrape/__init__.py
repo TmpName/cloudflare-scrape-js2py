@@ -67,12 +67,21 @@ class CloudflareScraper(Session):
         return False
 
     def request(self, method, url, *args, **kwargs):
-        self.headers['Accept-Encoding'] = 'gzip, deflate'
-        self.headers['Accept-Language'] = 'en-US,en;q=0.9'
-        self.headers['DNT'] = '1'
+        self.headers = (
+            OrderedDict(
+                [
+                    ('User-Agent', self.headers['User-Agent']),
+                    ('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
+                    ('Accept-Language', 'en-US,en;q=0.5'),
+                    ('Accept-Encoding', 'gzip, deflate'),
+                    ('Connection',  'close'),
+                    ('Upgrade-Insecure-Requests', '1')
+                ]
+            )
+        )
 
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
-
+        
         # Check if Cloudflare anti-bot is on
         if self.is_cloudflare_challenge(resp):           
             # Work around if the initial request is not a GET,
