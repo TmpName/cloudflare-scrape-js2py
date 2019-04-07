@@ -19,7 +19,7 @@ except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import urlunparse
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
 # Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
@@ -204,6 +204,7 @@ class CloudflareScraper(Session):
             def atob(s):
                 return base64.b64decode('{}'.format(s)).decode('utf-8')
 
+            js2py.disable_pyimport()
             context = js2py.EvalJs({'atob': atob})
             result = context.eval(js)
         except Exception:
