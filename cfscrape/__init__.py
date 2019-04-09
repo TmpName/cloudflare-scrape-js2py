@@ -11,6 +11,7 @@ from .jsfuck import jsunfuck
 
 import js2py
 from requests.sessions import Session
+from requests_toolbelt.utils import dump
 
 try:
     from urlparse import urlparse
@@ -19,7 +20,7 @@ except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import urlunparse
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
 # Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
@@ -41,12 +42,13 @@ Cloudflare may have changed their technique, or there may be a bug in the script
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         self.delay = kwargs.pop('delay', 8)
+        self.debug = False
+
         super(CloudflareScraper, self).__init__(*args, **kwargs)
 
         if 'requests' in self.headers['User-Agent']:
             # Set a random User-Agent if no custom User-Agent has been set
             self.headers['User-Agent'] = random.choice(DEFAULT_USER_AGENTS)
-
 
     def set_cloudflare_challenge_delay(self, delay):
         if isinstance(delay, (int, float)) and delay > 0:
@@ -56,13 +58,16 @@ class CloudflareScraper(Session):
         if resp.headers.get('Server', '').startswith('cloudflare'):
             if b'why_captcha' in resp.content or b'/cdn-cgi/l/chk_captcha' in resp.content:
                 raise ValueError('Captcha')
-            
+
             return (
                 resp.status_code in [429, 503]
                 and b"jschl_vc" in resp.content
                 and b"jschl_answer" in resp.content
             )
         return False
+
+    def debugRequest(self, req):
+        print (dump.dump_all(req).decode('utf-8'))
 
     def request(self, method, url, *args, **kwargs):
         self.headers = (
@@ -79,9 +84,13 @@ class CloudflareScraper(Session):
         )
 
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
-        
+
+        # Debug request
+        if self.debug:
+            self.debugRequest(resp)
+
         # Check if Cloudflare anti-bot is on
-        if self.is_cloudflare_challenge(resp):           
+        if self.is_cloudflare_challenge(resp):
             # Work around if the initial request is not a GET,
             # Superseed with a GET then re-request the orignal METHOD.
             if resp.request.method != 'GET':
@@ -140,7 +149,7 @@ class CloudflareScraper(Session):
         method = resp.request.method
 
         cloudflare_kwargs['allow_redirects'] = False
-        
+
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
         redirect_location = urlparse(redirect.headers['Location'])
         if not redirect_location.netloc:
@@ -236,8 +245,10 @@ class CloudflareScraper(Session):
 
     # Functions for integrating cloudflare-scrape with other applications and scripts
     @classmethod
-    def get_tokens(cls, url, user_agent=None, **kwargs):
+    def get_tokens(cls, url, user_agent=None, debug=False, **kwargs):
         scraper = cls.create_scraper()
+        scraper.debug = debug
+
         if user_agent:
             scraper.headers['User-Agent'] = user_agent
 
@@ -267,11 +278,11 @@ class CloudflareScraper(Session):
         )
 
     @classmethod
-    def get_cookie_string(cls, url, user_agent=None, **kwargs):
+    def get_cookie_string(cls, url, user_agent=None, debug=False, **kwargs):
         """
         Convenience function for building a Cookie HTTP header value.
         """
-        tokens, user_agent = cls.get_tokens(url, user_agent=user_agent, **kwargs)
+        tokens, user_agent = cls.get_tokens(url, user_agent=user_agent, debug=debug, **kwargs)
         return "; ".join("=".join(pair) for pair in tokens.items()), user_agent
 
 create_scraper = CloudflareScraper.create_scraper

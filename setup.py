@@ -18,5 +18,5 @@ setup(
   url = 'https://github.com/venomous/cloudflare-scrape-js2py',
   keywords = ['cloudflare', 'scraping'],
   include_package_data = True,
-  install_requires = ['requests >= 2.9.2', 'js2py >= 0.60']
+  install_requires = ['requests >= 2.9.2', 'js2py >= 0.60', 'requests_toolbelt >= 0.8.0']
 )
