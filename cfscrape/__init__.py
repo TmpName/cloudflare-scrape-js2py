@@ -189,7 +189,6 @@ class CloudflareScraper(Session):
 
         js = js.replace('; 121', '')
 
-
         # Strip characters that could be used to exit the string context
         # These characters are not currently used in Cloudflare's arithmetic snippet
         js = re.sub(r"[\n\\']", "", js)
@@ -236,7 +235,6 @@ class CloudflareScraper(Session):
 
             js2py.disable_pyimport()
             context = js2py.EvalJs({'atob': atob})
-
             result = context.eval(js)
         except Exception:
             logging.error("Error executing Cloudflare IUAM Javascript. {}".format(BUG_REPORT))
