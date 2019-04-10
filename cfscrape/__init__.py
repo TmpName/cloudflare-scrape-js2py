@@ -11,7 +11,11 @@ from .jsfuck import jsunfuck
 
 import js2py
 from requests.sessions import Session
-from requests_toolbelt.utils import dump
+
+try:
+    from requests_toolbelt.utils import dump
+except ImportError:
+    pass
 
 try:
     from urlparse import urlparse
@@ -20,7 +24,7 @@ except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import urlunparse
 
-__version__ = "2.0.2"
+__version__ = "2.0.3"
 
 # Orignally written by https://github.com/Anorov/cloudflare-scrape
 # Rewritten by VeNoMouS - <venom@gen-x.co.nz> for https://github.com/VeNoMouS/Sick-Beard - 24/3/2018 NZDT
@@ -67,7 +71,10 @@ class CloudflareScraper(Session):
         return False
 
     def debugRequest(self, req):
-        print (dump.dump_all(req).decode('utf-8'))
+        try:
+            print (dump.dump_all(req).decode('utf-8'))
+        except:
+            pass
 
     def request(self, method, url, *args, **kwargs):
         self.headers = (
@@ -177,9 +184,11 @@ class CloudflareScraper(Session):
             raise ValueError("Unable to identify Cloudflare IUAM Javascript on website. {}".format(BUG_REPORT))
 
         js = re.sub(r"a\.value = ((.+).toFixed\(10\))?", r"\1", js)
+        js = re.sub(r'(e\s=\sfunction\(s\)\s{.*?};)', '', js, flags=re.DOTALL|re.MULTILINE)
         js = re.sub(r"\s{3,}[a-z](?: = |\.).+", "", js).replace("t.length", str(len(domain)))
 
         js = js.replace('; 121', '')
+
 
         # Strip characters that could be used to exit the string context
         # These characters are not currently used in Cloudflare's arithmetic snippet
@@ -192,6 +201,18 @@ class CloudflareScraper(Session):
             jsEnv = """
             var t = "{domain}";
             var g = String.fromCharCode;
+
+            o = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            e = function(s) {{
+                s += "==".slice(2 - (s.length & 3));
+                var bm, r = "", r1, r2, i = 0;
+                for (; i < s.length;) {{
+                    bm = o.indexOf(s.charAt(i++)) << 18 | o.indexOf(s.charAt(i++)) << 12 | (r1 = o.indexOf(s.charAt(i++))) << 6 | (r2 = o.indexOf(s.charAt(i++)));
+                    r += r1 === 64 ? g(bm >> 16 & 255) : r2 === 64 ? g(bm >> 16 & 255, bm >> 8 & 255) : g(bm >> 16 & 255, bm >> 8 & 255, bm & 255);
+                }}
+                return r;
+            }};
+
             function italics (str) {{ return '<i>' + this + '</i>'; }};
             var document = {{
                 getElementById: function () {{
@@ -215,6 +236,7 @@ class CloudflareScraper(Session):
 
             js2py.disable_pyimport()
             context = js2py.EvalJs({'atob': atob})
+
             result = context.eval(js)
         except Exception:
             logging.error("Error executing Cloudflare IUAM Javascript. {}".format(BUG_REPORT))
